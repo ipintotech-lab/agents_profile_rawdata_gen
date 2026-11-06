@@ -3,6 +3,7 @@
 each, one trace format per company) with planted cases, plus the answer key.
 
     python3 generate_companies.py --out out
+    python3 generate_companies.py --out out-5x --scale 5   # 5x the runs, same month
     -> out/traffic/<company>/...   the files to feed profiler-client prepare
        out/truth.json              the answer key -- never upload it
 """
@@ -31,13 +32,16 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path("out"))
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--days", type=int, default=30)
+    parser.add_argument("--scale", type=float, default=1.0, help="multiply every agent's runs per day (e.g. 2, 5)")
     parser.add_argument("--company", action="append", choices=sorted(COMPANIES), help="default: all five")
     args = parser.parse_args()
 
-    truth = {"seed": args.seed, "days": args.days, "companies": {}, "cases": []}
+    if args.scale <= 0:
+        parser.error("--scale must be positive")
+    truth = {"seed": args.seed, "days": args.days, "scale": args.scale, "companies": {}, "cases": []}
     for key in args.company or list(COMPANIES):
         company = COMPANIES[key]
-        runs = company_runs(company, args.seed, args.days)
+        runs = company_runs(company, args.seed, args.days, args.scale)
         out = args.out / "traffic" / key
         if out.exists():
             shutil.rmtree(out)

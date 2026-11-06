@@ -102,7 +102,7 @@ COMPANY = Company("law_office", "Law office", "openai-chat", "firm", [
     AgentDef("deadline-docketing", deadline_docketing, 3, MODEL, weekdays_only=True, cases=[
         Case("CONDITIONAL_LLM_BYPASS", True, "edge", "after the court rules it always computes the deadline -- "
              "but chat logs carry no cost to price it", after="get_court_rules")]),
-    AgentDef("discovery-summary", discovery_summary, 0.2, MODEL, weekdays_only=True, cases=[
+    AgentDef("discovery-summary", discovery_summary, 0.2, MODEL, weekdays_only=True, rare=True, cases=[
         Case("CONDITIONAL_LLM_BYPASS", False, "edge", "only a few runs a month", after="load_document_batch")]),
     AgentDef("email-triage", email_triage, 80, MODEL, hours=(7, 21)),
     AgentDef("nda-generation", nda_generation, 1, MODEL, weekdays_only=True, cases=[

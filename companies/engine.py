@@ -52,6 +52,9 @@ class AgentDef:
     model: str
     llm_tokens: tuple[int, int] = (900, 120)
     weekdays_only: bool = False
+    # an agent whose planted fact is that it runs too rarely to trust:
+    # ``scale`` leaves its volume alone, so it stays rare
+    rare: bool = False
     hours: tuple[int, int] = (8, 20)
     # (first day index, semver) -- a later entry is a release mid-month
     versions: list[tuple[int, str]] = field(default_factory=lambda: [(0, "1.0.0")])
@@ -88,14 +91,16 @@ def _version(agent: AgentDef, day: int) -> str:
     return [v for first, v in agent.versions if first <= day][-1]
 
 
-def agent_runs(company: Company, agent: AgentDef, seed: int, days: int) -> list[Run]:
+def agent_runs(company: Company, agent: AgentDef, seed: int, days: int, scale: float = 1.0) -> list[Run]:
+    """``scale`` multiplies the agent's runs per day: the same month, ``scale``
+    times the traffic. A ``rare`` agent keeps its volume."""
     rng = random.Random(f"{seed}:{company.key}:{agent.name}")
     runs: list[Run] = []
     for day in range(days):
         date = START + timedelta(days=day)
         if agent.weekdays_only and date.weekday() >= 5:
             continue
-        for index in range(_poisson(rng, agent.runs_per_day)):
+        for index in range(_poisson(rng, agent.runs_per_day * (1.0 if agent.rare else scale))):
             start = date + timedelta(hours=rng.uniform(*agent.hours))
             run = Run(company.key, agent.name, agent.workflow, f"{agent.name}-d{day:02d}-{index:04d}",
                       _version(agent, day), agent.model, start)
@@ -106,6 +111,6 @@ def agent_runs(company: Company, agent: AgentDef, seed: int, days: int) -> list[
     return runs
 
 
-def company_runs(company: Company, seed: int, days: int = 30) -> list[Run]:
-    runs = [r for agent in company.agents for r in agent_runs(company, agent, seed, days)]
+def company_runs(company: Company, seed: int, days: int = 30, scale: float = 1.0) -> list[Run]:
+    runs = [r for agent in company.agents for r in agent_runs(company, agent, seed, days, scale)]
     return sorted(runs, key=lambda r: r.start)

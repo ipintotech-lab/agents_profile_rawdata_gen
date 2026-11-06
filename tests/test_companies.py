@@ -114,3 +114,16 @@ def test_sequences_occur(month):
         assert case["observed"]["occurrences"] >= 20, case["id"]
         # the saving is the LLM calls between the steps the format records
         assert (case["observed"]["llm_calls_between"] > 0) == case["expect"], case["id"]
+
+
+def test_scale_multiplies_traffic_but_rare_agents_stay_rare():
+    company = next(c for c in COMPANIES.values() if any(a.rare for a in c.agents))
+    rare = {a.name for a in company.agents if a.rare}
+
+    def counts(scale):
+        runs = company_runs(company, seed=7, days=30, scale=scale)
+        return (sum(r.agent in rare for r in runs), sum(r.agent not in rare for r in runs))
+
+    (rare_1x, busy_1x), (rare_5x, busy_5x) = counts(1), counts(5)
+    assert rare_5x == rare_1x
+    assert 4 * busy_1x < busy_5x < 6 * busy_1x

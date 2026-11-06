@@ -110,7 +110,7 @@ COMPANY = Company("fintech", "Fintech website", "otel", "payments-api", [
         Case("CACHE_RESULT", True, "positive", "150 merchants, looked up again and again", tool="get_merchant"),
         Case("CONDITIONAL_LLM_BYPASS", True, "positive", "after the merchant lookup it always assigns the category",
              after="get_merchant")]),
-    AgentDef("aml-report", aml_report, 0.1, MODEL, cases=[
+    AgentDef("aml-report", aml_report, 0.1, MODEL, rare=True, cases=[
         Case("CONDITIONAL_LLM_BYPASS", False, "edge", "consistent, but only ~3 runs a month: too few to trust",
              after="get_flagged_accounts")]),
     AgentDef("onboarding-email", onboarding_email, 30, MODEL, cases=[
