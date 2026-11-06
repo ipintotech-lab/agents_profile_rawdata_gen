@@ -112,3 +112,5 @@ def test_hidden_state_positives_vary_on_identical_input(month):
 def test_sequences_occur(month):
     for case in _cases(month, type="EXTRACT_DETERMINISTIC_SUBSTEP"):
         assert case["observed"]["occurrences"] >= 20, case["id"]
+        # the saving is the LLM calls between the steps the format records
+        assert (case["observed"]["llm_calls_between"] > 0) == case["expect"], case["id"]

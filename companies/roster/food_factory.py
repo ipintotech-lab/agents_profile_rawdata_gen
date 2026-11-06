@@ -118,7 +118,8 @@ COMPANY = Company("food_factory", "Food factory", "generic", "plant-mes", [
         Case("CONDITIONAL_LLM_BYPASS", False, "trap", "every batch is new, and outside the region it's noisy",
              llm="grade_batch")]),
     AgentDef("recipe-scaling", recipe_scaling, 30, MODEL, versions=[(0, "1.0.0"), (15, "1.1.0")], cases=[
-        Case("EXTRACT_DETERMINISTIC_SUBSTEP", True, "positive", "always load -> scale -> convert",
+        Case("EXTRACT_DETERMINISTIC_SUBSTEP", False, "edge", "always load -> scale -> convert, but the event log "
+             "records no LLM call between the steps, so scripting them saves nothing",
              steps=["load_recipe", "scale_quantities", "convert_units"]),
         Case("CACHE_RESULT", True, "positive", "25 recipes loaded again and again", tool="load_recipe"),
         Case("CONDITIONAL_LLM_BYPASS", True, "positive", "a fixed table per version", llm="choose_substitution"),

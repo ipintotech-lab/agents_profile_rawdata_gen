@@ -60,7 +60,9 @@ def _cache_stats(runs: list[Run], tool: str) -> dict:
             "inputs_with_varying_output": len(groups) - len(stable)}
 
 
-def _sequence_stats(runs: list[Run], steps: list[str]) -> dict:
+def _sequence_stats(runs: list[Run], steps: list[str], logs_routers: bool) -> dict:
+    """``logs_routers``: whether the format records the router turns between
+    tools (the generic event log doesn't, so there is nothing to save)."""
     occurrences, glue = 0, []
     for run in runs:
         names = [s for s in run.steps if s.kind == "tool"]
@@ -68,14 +70,14 @@ def _sequence_stats(runs: list[Run], steps: list[str]) -> dict:
             if [s.name for s in names[i:i + len(steps)]] == steps:
                 occurrences += 1
                 lo, hi = run.steps.index(names[i]), run.steps.index(names[i + len(steps) - 1])
-                glue += [s for s in run.steps[lo:hi] if s.kind == "llm"]
+                glue += [s for s in run.steps[lo:hi] if s.kind == "llm" and (logs_routers or not s.implicit)]
     return {"occurrences": occurrences, "llm_calls_between": len(glue),
             "llm_cost_between_usd": round(sum(s.cost for s in glue), 4)}
 
 
-def _calibrate(case: Case, runs: list[Run]) -> dict:
+def _calibrate(case: Case, runs: list[Run], fmt: str) -> dict:
     if case.steps:
-        return _sequence_stats(runs, case.steps)
+        return _sequence_stats(runs, case.steps, fmt != "generic")
     if case.tool:
         return _cache_stats(runs, case.tool)
     if case.llm:
@@ -104,7 +106,7 @@ def case_rows(company: Company, runs: list[Run]) -> list[dict]:
                                         after=case.after)
             if case.field:
                 row["field"] = case.field
-            row["observed"] = {**_calibrate(case, by_agent[agent.name]),
+            row["observed"] = {**_calibrate(case, by_agent[agent.name], company.format),
                                "cost_in_format": company.format in COST_FORMATS}
             rows.append(row)
     return rows
