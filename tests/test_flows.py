@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from companies.flows import FLOWS, flow_runs
+from companies.flows import ESCALATE, FLOWS, flow_runs
 from companies.formats import generic
 from companies.roster import COMPANIES
 
@@ -29,9 +29,36 @@ def test_runs_visit_the_agents_in_order_and_hand_off(tmp_path: Path):
             by_run.setdefault(row["run_id"], []).append(row)
         for events in by_run.values():
             order = [e["agent"] for e in events]
-            assert [a for i, a in enumerate(order) if i == 0 or a != order[i - 1]] == flow.agents
-            handoffs = [e["result"] for e in events if e["node"] == "handoff"]
-            assert handoffs == flow.agents[1:]
+            visited = [a for i, a in enumerate(order) if i == 0 or a != order[i - 1]]
+            handoffs = [e for e in events if e["node"] == "handoff"]
+            # stages run in flow order; only the optional one is ever skipped
+            assert visited[0] == flow.agents[0]
+            assert visited == [a for a in flow.agents if a in visited]
+            assert set(flow.agents[:flow.agents.index(visited[-1]) + 1]) - set(visited) <= {flow.optional}
+            # each handoff names the agent that ran next; escalate ends the run
+            assert [h["result"] for h in handoffs if h["result"] != ESCALATE] == visited[1:]
+            if visited[-1] != flow.agents[-1]:
+                assert handoffs[-1]["result"] == ESCALATE
+                assert handoffs[-1]["input_state"]["case"] == "review"
+
+
+def test_handoff_varies_by_case():
+    """Whole month: every route shows up, and the same input doesn't always
+    get the same answer -- the handoff is a judgement, not a lookup."""
+    for key, flow in FLOWS.items():
+        runs = flow_runs(COMPANIES[key], flow, seed=7, days=30)
+        seen: dict[tuple, set] = {}
+        for run in runs:
+            for s in run.steps:
+                if s.name == "handoff":
+                    seen.setdefault((s.input["from"], s.input["case"]), set()).add(s.output)
+        answers = set().union(*seen.values())
+        assert ESCALATE in answers
+        i = flow.agents.index(flow.optional)
+        assert flow.agents[i + 1] in seen[(flow.agents[i - 1], "expedited")]  # expedited skips the optional one
+        assert any(len(v) > 1 for v in seen.values())
+        lengths = {len({s.agent for s in r.steps}) for r in runs}
+        assert lengths >= {4, 5} and min(lengths) < 4
 
 
 def test_same_seed_same_runs():
