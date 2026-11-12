@@ -20,7 +20,7 @@ def _event(run: Run, step) -> dict:
         "trace_id": f"trace-{run.run_id}",
         "run_id": run.run_id,
         "workflow": run.workflow,
-        "agent": run.agent,
+        "agent": step.agent or run.agent,
         "event_type": "decision" if step.kind == "llm" else "tool_call",
         "node": step.name,
         "timestamp": step.start.isoformat(),

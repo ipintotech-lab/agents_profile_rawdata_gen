@@ -51,6 +51,7 @@ class Step:
     decision_type: str | None = None
     implicit: bool = False  # a router turn that only picks the next tool
     chose: list[str] = field(default_factory=list)  # llm: the tools it called
+    agent: str | None = None  # the agent that took the step, in a multi-agent flow (else the run's)
 
 
 @dataclass
@@ -86,6 +87,7 @@ class RunCtx:
         self.rng = rng
         self.now = run.start
         self.llm_tokens = llm_tokens
+        self.agent: str | None = None  # set by a flow when it hands over to the next agent
 
     def _advance(self, latency_ms: float) -> datetime:
         start = self.now
@@ -100,7 +102,7 @@ class RunCtx:
         latency = 250 + t_out * self.rng.uniform(12, 25)
         step = Step("llm", name, dict(input), output, self._advance(latency), round(latency, 1),
                     (t_in, t_out), price(self.run.model, t_in, t_out), self.run.model,
-                    decision_type=decision_type, implicit=implicit)
+                    decision_type=decision_type, implicit=implicit, agent=self.agent)
         self.run.steps.append(step)
         return step
 
@@ -123,7 +125,7 @@ class RunCtx:
         chooser.chose.append(name)
         lat = self.rng.uniform(*latency)
         self.run.steps.append(Step("tool", name, dict(args), result, self._advance(lat), round(lat, 1),
-                                   error=error, side_effect=side_effect))
+                                   error=error, side_effect=side_effect, agent=self.agent))
         return result
 
     def finish(self) -> None:
