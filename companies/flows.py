@@ -6,8 +6,8 @@ under its name, then makes a ``handoff`` LLM decision that picks the next
 agent. The last stage answers instead. So one run, one trace and one
 workflow hold five agents, the way an orchestrated pipeline looks.
 
-Flows are written in the generic event log only: it is the format that
-records an agent on every event.
+Flows are written in the generic event log, which records an agent on
+every event, and in OpenTelemetry, which names the agent on every span.
 """
 from __future__ import annotations
 
