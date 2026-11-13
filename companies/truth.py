@@ -110,3 +110,49 @@ def case_rows(company: Company, runs: list[Run]) -> list[dict]:
                                "cost_in_format": company.format in COST_FORMATS}
             rows.append(row)
     return rows
+
+
+def _duplicate_stats(runs: list[Run], tool: str) -> dict:
+    """Runs where two or more agents call ``tool`` with the same arguments,
+    and whether every such group returned the same result in that run."""
+    same = differing = 0
+    for run in runs:
+        groups: dict[str, list] = defaultdict(list)
+        for s in run.steps:
+            if s.kind == "tool" and s.name == tool and not s.error:
+                groups[dumps(s.input)].append(s)
+        shared = [g for g in groups.values() if len({s.agent for s in g}) > 1]
+        if not shared:
+            continue
+        if all(len({dumps(s.output) for s in g}) == 1 for g in shared):
+            same += 1
+        else:
+            differing += 1
+    return {"runs_with_duplicate": same + differing, "runs_duplicate_same_output": same,
+            "runs_duplicate_differing_output": differing}
+
+
+def caseflow_rows(cases: dict, runs: list[Run], fmt: str, company: str, workflow: str) -> list[dict]:
+    """The case flow's rows (``caseflows.CASES``): ``scope: "flow"``; named
+    decisions are their own node in both formats."""
+    rows = []
+    for key, (case, agents) in cases.items():
+        row = {"id": f"{company}/{workflow}/{key}", "company": company, "format": fmt, "scope": "flow",
+               "agents": list(agents), "workflow": workflow, "category": case.category, "type": case.type,
+               "expect": case.expect, "why": case.why, "observable": {"generic": True, "otel": True}}
+        if case.steps:
+            row["steps"] = list(case.steps)
+        else:
+            row["node"] = case.tool or case.llm
+        if case.field:
+            row["field"] = case.field
+        if case.steps:
+            observed = _sequence_stats(runs, case.steps, fmt != "generic")
+        elif case.llm:
+            observed = _llm_stats([(r.version, s) for r in runs for s in r.steps
+                                   if s.kind == "llm" and s.name == case.llm])
+        else:
+            observed = {**_cache_stats(runs, case.tool), **_duplicate_stats(runs, case.tool)}
+        row["observed"] = {**observed, "cost_in_format": fmt in COST_FORMATS}
+        rows.append(row)
+    return rows

@@ -52,6 +52,7 @@ class Step:
     implicit: bool = False  # a router turn that only picks the next tool
     chose: list[str] = field(default_factory=list)  # llm: the tools it called
     agent: str | None = None  # the agent that took the step, in a multi-agent flow (else the run's)
+    segment: int | None = None  # which visit of an agent it belongs to, in a case flow (``caseflows.py``)
 
 
 @dataclass
@@ -64,6 +65,7 @@ class Run:
     model: str
     start: datetime
     steps: list[Step] = field(default_factory=list)
+    segments: list = field(default_factory=list)  # a case flow's agent visits (``caseflows.Segment``)
 
 
 def stable(*parts: Any) -> random.Random:
@@ -88,6 +90,7 @@ class RunCtx:
         self.now = run.start
         self.llm_tokens = llm_tokens
         self.agent: str | None = None  # set by a flow when it hands over to the next agent
+        self.segment: int | None = None  # set by a case flow at each agent visit
 
     def _advance(self, latency_ms: float) -> datetime:
         start = self.now
@@ -102,7 +105,7 @@ class RunCtx:
         latency = 250 + t_out * self.rng.uniform(12, 25)
         step = Step("llm", name, dict(input), output, self._advance(latency), round(latency, 1),
                     (t_in, t_out), price(self.run.model, t_in, t_out), self.run.model,
-                    decision_type=decision_type, implicit=implicit, agent=self.agent)
+                    decision_type=decision_type, implicit=implicit, agent=self.agent, segment=self.segment)
         self.run.steps.append(step)
         return step
 
@@ -125,7 +128,7 @@ class RunCtx:
         chooser.chose.append(name)
         lat = self.rng.uniform(*latency)
         self.run.steps.append(Step("tool", name, dict(args), result, self._advance(lat), round(lat, 1),
-                                   error=error, side_effect=side_effect, agent=self.agent))
+                                   error=error, side_effect=side_effect, agent=self.agent, segment=self.segment))
         return result
 
     def finish(self) -> None:
