@@ -39,8 +39,10 @@ def main() -> int:
         out = args.out / "traffic" / key
         if out.exists():
             shutil.rmtree(out)
-        render = otel.render if args.format == "otel" else generic.render
-        files = render(runs, out, COMPANIES[key].server)
+        if args.format == "otel":
+            files = otel.render(runs, out, COMPANIES[key].server, named_decisions=True)
+        else:
+            files = generic.render(runs, out, COMPANIES[key].server)
         events = sum(1 for r in runs for s in r.steps if not s.implicit)
         print(f"{key:13} {flow.workflow:20} {len(runs):5} runs {events:7} events {len(files):3} files  "
               f"{' -> '.join(flow.agents)}", file=sys.stderr)
