@@ -3,7 +3,8 @@ export request per line, one trace per run, GenAI semantic conventions
 (``gen_ai.*``). A root ``invoke_agent`` span holds an ``chat`` span per LLM
 call and an ``execute_tool`` span per tool call, with arguments and results
 recorded (``gen_ai.tool.call.arguments`` / ``.result``) and the LLM cost in
-``gen_ai.usage.cost``.
+``gen_ai.usage.cost``. In a multi-agent flow the root span is the workflow
+and each child span names the stage's agent in ``gen_ai.agent.name``.
 """
 from __future__ import annotations
 
@@ -31,6 +32,8 @@ def _nanos(step: Step) -> tuple[str, str]:
 
 def _span(run: Run, trace_id: str, root: str, index: int, step: Step, attrs: dict, name: str) -> dict:
     start, end = _nanos(step)
+    if step.agent:  # a stage of a multi-agent flow
+        attrs = {**attrs, "gen_ai.agent.name": step.agent}
     span = {
         "traceId": trace_id, "spanId": hex_id(run.run_id, index, length=16), "parentSpanId": root,
         "name": name, "kind": 1, "startTimeUnixNano": start, "endTimeUnixNano": end,

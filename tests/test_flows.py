@@ -65,3 +65,21 @@ def test_same_seed_same_runs():
     flow = FLOWS["law_office"]
     a, b = (flow_runs(COMPANIES["law_office"], flow, seed=3, days=2) for _ in range(2))
     assert [(r.run_id, len(r.steps)) for r in a] == [(r.run_id, len(r.steps)) for r in b]
+
+
+def test_otel_flows_name_each_stages_agent_on_its_spans(tmp_path: Path):
+    from companies.formats import otel
+
+    flow = FLOWS["fintech"]
+    runs = flow_runs(COMPANIES["fintech"], flow, seed=7, days=2)
+    otel.render(runs, tmp_path, COMPANIES["fintech"].server)
+    requests = [json.loads(line) for p in sorted(tmp_path.glob("otlp-traces-*.jsonl")) for line in p.open()]
+    assert len(requests) == len(runs)
+    for request in requests:
+        (scope,) = request["resourceSpans"][0]["scopeSpans"]
+        root, *children = scope["spans"]
+        assert root["name"] == f"invoke_agent {flow.workflow}"
+        assert {s["parentSpanId"] for s in children} == {root["spanId"]}
+        agents = [next(a["value"]["stringValue"] for a in s["attributes"] if a["key"] == "gen_ai.agent.name")
+                  for s in children]
+        assert [a for i, a in enumerate(agents) if i == 0 or a != agents[i - 1]] == flow.agents

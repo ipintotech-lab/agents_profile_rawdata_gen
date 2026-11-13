@@ -17,8 +17,8 @@ The handoff routes on the run's case, which it sees in its input:
 allows, for a reason the trace doesn't show -- so the handoff is a real
 decision, not a rule a lookup table could replace.
 
-Flows are written in the generic event log only: it is the format that
-records an agent on every event.
+Flows are written in the generic event log, which records an agent on
+every event, and in OpenTelemetry, which names the agent on every span.
 """
 from __future__ import annotations
 
