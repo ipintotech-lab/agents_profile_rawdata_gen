@@ -84,3 +84,26 @@ def test_otel_flows_name_each_stages_agent_on_its_spans(tmp_path: Path):
                   for s in children]
         assert agents == [s.agent for s in run.steps]
         assert agents[0] == flow.agents[0]
+
+
+def test_otel_flows_record_each_named_decision_on_its_span(tmp_path: Path):
+    from companies.formats import otel
+
+    flow = FLOWS["law_office"]
+    runs = flow_runs(COMPANIES["law_office"], flow, seed=7, days=2)
+    otel.render(runs, tmp_path, COMPANIES["law_office"].server, named_decisions=True)
+    named = []
+    for p in sorted(tmp_path.glob("otlp-traces-*.jsonl")):
+        for line in p.open():
+            for span in json.loads(line)["resourceSpans"][0]["scopeSpans"][0]["spans"]:
+                attrs = {a["key"]: next(iter(a["value"].values())) for a in span["attributes"]}
+                if "traceloop.entity.name" in attrs:
+                    assert span["name"].startswith("chat ")
+                    named.append((attrs["traceloop.entity.name"], json.loads(attrs["traceloop.entity.input"]),
+                                  json.loads(attrs["traceloop.entity.output"])))
+    want = [(s.name, s.input, s.output) for r in runs for s in r.steps if s.kind == "llm" and not s.implicit]
+    assert sorted(json.dumps(n, sort_keys=True) for n in named) == sorted(json.dumps(w, sort_keys=True) for w in want)
+    assert any(n == "handoff" and set(i) == {"from", "case"} for n, i, _ in named)
+    # the company traffic is framework-instrumented: no names unless asked
+    otel.render(runs[:1], tmp_path / "plain", COMPANIES["law_office"].server)
+    assert "traceloop.entity" not in next((tmp_path / "plain").glob("*.jsonl")).read_text()

@@ -5,6 +5,11 @@ call and an ``execute_tool`` span per tool call, with arguments and results
 recorded (``gen_ai.tool.call.arguments`` / ``.result``) and the LLM cost in
 ``gen_ai.usage.cost``. In a multi-agent flow the root span is the workflow
 and each child span names the stage's agent in ``gen_ai.agent.name``.
+
+With ``named_decisions`` (the flows, whose orchestrator is hand-instrumented)
+a named LLM decision such as ``handoff`` also records its name, input and
+choice the way OpenLLMetry's task decorator does: ``traceloop.entity.name``,
+``.input`` and ``.output``. Router turns stay unnamed.
 """
 from __future__ import annotations
 
@@ -43,7 +48,7 @@ def _span(run: Run, trace_id: str, root: str, index: int, step: Step, attrs: dic
     return span
 
 
-def _request(run: Run, service: str) -> dict:
+def _request(run: Run, service: str, named_decisions: bool) -> dict:
     trace_id = hex_id(run.run_id)
     root = hex_id(run.run_id, "root", length=16)
     common = {"traceloop.workflow.name": run.workflow, "gen_ai.agent.name": run.agent}
@@ -51,8 +56,13 @@ def _request(run: Run, service: str) -> dict:
     index = 0
     for llm, tools in turns(run):
         index += 1
+        named = {}
+        if named_decisions and not llm.implicit:
+            named = {"traceloop.entity.name": llm.name, "traceloop.entity.input": dumps(llm.input),
+                     "traceloop.entity.output": dumps(llm.output)}
         spans.append(_span(run, trace_id, root, index, llm, {
             **common,
+            **named,
             "gen_ai.operation.name": "chat",
             "gen_ai.request.model": llm.model,
             "gen_ai.response.model": llm.model,
@@ -87,10 +97,10 @@ def _request(run: Run, service: str) -> dict:
     }]}
 
 
-def render(runs: list[Run], out: Path, server: str) -> list[Path]:
+def render(runs: list[Run], out: Path, server: str, named_decisions: bool = False) -> list[Path]:
     by_day: dict[str, list[dict]] = defaultdict(list)
     for run in runs:
-        by_day[run.start.date().isoformat()].append(_request(run, server))
+        by_day[run.start.date().isoformat()].append(_request(run, server, named_decisions))
     paths = []
     for day, rows in sorted(by_day.items()):
         path = out / f"otlp-traces-{day}.jsonl"
