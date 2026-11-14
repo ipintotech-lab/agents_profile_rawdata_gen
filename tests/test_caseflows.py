@@ -166,3 +166,38 @@ def test_five_agent_flows_are_unchanged(tmp_path: Path, fmt: str):
         else:
             generic.render(runs, tmp_path / key, COMPANIES[key].server)
     assert _digest(tmp_path) == FLOWS_DIGEST[fmt]
+
+
+NOISY = caseflow_runs(seed=7, days=30, noise=0.1)
+
+
+def test_noise_only_adds_failed_attempts_each_retried_with_the_same_arguments():
+    def calls(run):
+        # the balance depends on whether the parallel fraud check's hold came first (F2): timing, which retries shift
+        return Counter((s.agent, s.kind, s.name, json.dumps(s.input, sort_keys=True),
+                        None if s.name == "get_account_balance" else json.dumps(s.output, sort_keys=True))
+                       for s in run.steps if not s.error)
+
+    assert [r.run_id for r in NOISY] == [r.run_id for r in MONTH]
+    assert all(calls(n) == calls(c) for n, c in zip(NOISY, MONTH))
+    failed = [(r, i) for r in NOISY for i, s in enumerate(r.steps) if s.error]
+    tools = sum(s.kind == "tool" for r in NOISY for s in r.steps if not s.error)
+    assert 0.07 < len(failed) / tools < 0.13
+    assert {s.error for r, i in failed for s in [r.steps[i]]} == {"timed out after 30 s", "503 service unavailable"}
+    for run, i in failed:
+        s = run.steps[i]
+        retry = next(t for t in run.steps[i + 1:] if t.kind == "tool" and t.agent == s.agent and not t.error)
+        assert (retry.name, retry.input) == (s.name, s.input)
+    assert not any(s.error for r in caseflow_runs(seed=7, days=3, noise=0) for s in r.steps)
+
+
+def test_with_noise_every_expected_value_stays_the_same():
+    clean = {r["id"]: r for r in caseflow_rows(CASES, MONTH, "generic", "fintech", "loan-application")}
+    noisy = {r["id"]: r for r in caseflow_rows(CASES, NOISY, "generic", "fintech", "loan-application")}
+    for key, row in noisy.items():
+        assert row["expect"] == clean[key]["expect"]
+        if row["type"] in ("CROSS_AGENT_DUPLICATE", "CACHE_RESULT") and row["node"] != "get_account_balance":
+            assert row["observed"] == clean[key]["observed"], key  # a failed call never hides a duplicate (F1, F3)
+    o = {k.rsplit("/", 1)[1]: r["observed"] for k, r in noisy.items()}
+    assert o["F2"]["runs_duplicate_differing_output"] > 0  # the trap is still a trap
+    assert o["F3"]["runs_duplicate_differing_output"] == 0 and o["F3"]["runs_with_duplicate"] >= 10

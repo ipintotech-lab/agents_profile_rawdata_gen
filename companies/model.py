@@ -66,6 +66,7 @@ class Run:
     start: datetime
     steps: list[Step] = field(default_factory=list)
     segments: list = field(default_factory=list)  # a case flow's agent visits (``caseflows.Segment``)
+    noise: float = 0.0  # share of tool calls that fail once and are retried (``RunCtx.tool``)
 
 
 def stable(*parts: Any) -> random.Random:
@@ -126,10 +127,28 @@ class RunCtx:
         if chooser is None:
             chooser = self._llm_step("route", {}, None, (self.llm_tokens[0], 40), "next_action", implicit=True)
         chooser.chose.append(name)
+        if self.run.noise and not error:
+            self._fail_once(name, args, side_effect, latency)
         lat = self.rng.uniform(*latency)
         self.run.steps.append(Step("tool", name, dict(args), result, self._advance(lat), round(lat, 1),
                                    error=error, side_effect=side_effect, agent=self.agent, segment=self.segment))
         return result
+
+    def _fail_once(self, name: str, args: dict, side_effect: bool | None, latency: tuple[float, float]) -> None:
+        """With probability ``run.noise``, a failed attempt (a timeout or a
+        server error) before the call, which the agent then retries with the
+        same arguments. Its own random source, so the run's other steps stay
+        exactly as they are without noise."""
+        r = stable("noise", self.run.run_id, self.agent, len(self.run.steps), name)
+        if r.random() >= self.run.noise:
+            return
+        timeout = r.random() < 0.5
+        lat = 30000.0 if timeout else r.uniform(*latency)
+        start = self.now
+        self.now += timedelta(milliseconds=lat + r.uniform(5, 40))
+        self.run.steps.append(Step("tool", name, dict(args), None, start, round(lat, 1),
+                                   error="timed out after 30 s" if timeout else "503 service unavailable",
+                                   side_effect=side_effect, agent=self.agent, segment=self.segment))
 
     def finish(self) -> None:
         """The closing LLM turn that answers instead of calling a tool."""

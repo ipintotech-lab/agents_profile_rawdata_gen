@@ -302,7 +302,7 @@ def case_run(rng: random.Random, run: Run) -> None:
     ctx.finish()
 
 
-def caseflow_runs(seed: int, days: int, scale: float = 1.0) -> list[Run]:
+def caseflow_runs(seed: int, days: int, scale: float = 1.0, noise: float = 0.0) -> list[Run]:
     rng = random.Random(f"{seed}:{COMPANY}:caseflow:{WORKFLOW}")
     runs: list[Run] = []
     for day in range(days):
@@ -310,7 +310,7 @@ def caseflow_runs(seed: int, days: int, scale: float = 1.0) -> list[Run]:
         for index in range(_poisson(rng, RUNS_PER_DAY * scale)):
             start = date + timedelta(hours=rng.uniform(*HOURS))
             run = Run(COMPANY, WORKFLOW, WORKFLOW, f"{WORKFLOW}-d{day:02d}-{index:04d}", "1.0.0",
-                      AGENTS[SUPERVISOR][0], start)
+                      AGENTS[SUPERVISOR][0], start, noise=noise)
             case_run(rng, run)
             runs.append(run)
     return sorted(runs, key=lambda r: r.start)
