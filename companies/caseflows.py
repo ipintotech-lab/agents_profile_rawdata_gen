@@ -329,8 +329,9 @@ CASES: dict[str, tuple[Case, tuple[str, ...]]] = {
                 tool="get_transaction_history"), CHECKS),
     "F4": (Case("CONDITIONAL_LLM_BYPASS", True, "positive", "after compliance review it always goes to the letter",
                 llm="route_after_compliance"), (SUPERVISOR,)),
-    "F5": (Case("DETERMINISTIC_REGION", True, "positive", "high-risk applications are always rejected",
-                llm="route_after_checks", field="risk_tier"), (SUPERVISOR,)),
+    "F5": (Case("CONDITIONAL_LLM_BYPASS", True, "positive", "the choice follows from the risk tier (high-risk "
+                "applications are always rejected): one lookup for the decision", llm="route_after_checks"),
+           (SUPERVISOR,)),
     "F6": (Case("CONDITIONAL_LLM_BYPASS", False, "trap", "10% of the time it picks another route, for a reason "
                 "the trace doesn't show", llm="route_after_kyc"), (SUPERVISOR,)),
     "F7": (Case("CACHE_RESULT", True, "positive", "KYC is looked up again on every rework pass, and for returning "
@@ -338,13 +339,15 @@ CASES: dict[str, tuple[Case, tuple[str, ...]]] = {
     "F8": (Case("EXTRACT_DETERMINISTIC_SUBSTEP", False, "trap", "the parallel checks interleave in a different "
                 "order each run: no sequence runs across the two branches",
                 steps=["get_account_balance", "get_customer_profile"]), CHECKS),
-    "F9": (Case("EXTRACT_DETERMINISTIC_SUBSTEP", None, "edge", "a fixed pair across a handoff: the credit score "
-                "always precedes the rate table", steps=["get_credit_score", "get_rate_table"]),
+    "F9": (Case("EXTRACT_DETERMINISTIC_SUBSTEP", False, "trap", "a fixed pair across a handoff: the credit score "
+                "always precedes the rate table, but a script spanning two agents would merge them",
+                steps=["get_credit_score", "get_rate_table"]),
            ("credit-assessment", "pricing")),
     "F10": (Case("CACHE_RESULT", False, "trap", "a person approves: long, varying waits and a different "
                  "answer each time", tool="request_human_approval"), ("compliance-review",)),
-    "F11": (Case("DETERMINISTIC_REGION", True, "positive", "above the amount threshold it always goes to "
-                 "compliance review", llm="route_after_pricing", field="amount_band"), (SUPERVISOR,)),
+    "F11": (Case("CONDITIONAL_LLM_BYPASS", True, "positive", "the choice follows from the amount band (above "
+                 "the threshold it always goes to compliance review): one lookup for the decision",
+                 llm="route_after_pricing"), (SUPERVISOR,)),
     "F12": (Case("CACHE_RESULT", True, "edge", "pricing and compliance read the same rate table, which is the "
                  "same across runs too: one finding, with a note that agents repeat it", tool="get_rate_table"),
             ("pricing", "compliance-review")),
